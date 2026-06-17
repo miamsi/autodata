@@ -16,7 +16,7 @@ class BudgetQueryEngine:
         
         if api_key:
             self.client = Groq(api_key=api_key)
-            self.model_name = "llama-3.3-70b-versatile"
+            self.model_name = "openai/gpt-oss-20b"
         else:
             self.client = None
 

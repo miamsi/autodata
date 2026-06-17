@@ -16,7 +16,7 @@ class BudgetQueryEngine:
         
         if api_key:
             self.client = Groq(api_key=api_key)
-            self.model_name = "qwen/qwen3.6-27b"
+            self.model_name = "llama-3.3-70b-versatile"
         else:
             self.client = None
 

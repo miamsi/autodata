@@ -35,9 +35,9 @@ if 'chat_history' not in st.session_state: st.session_state.chat_history = []
 
 with st.sidebar:
     st.markdown("### 🏛️ Governance Panel")
-    api_key = st.secrets.get("GEMINI_API_KEY", "")
+    api_key = st.secrets.get("GROQ_API_KEY", "")
     if not api_key:
-        st.warning("⚠️ GEMINI_API_KEY missing. Running in Offline Mode.")
+        st.warning("⚠️ GROQ_API_KEY missing. Running in Offline Math Mode.")
         
     uploaded_file = st.file_uploader("📥 Upload Official DIPA Ledger (.xlsx)", type=["xlsx", "csv"])
     
@@ -108,8 +108,8 @@ else:
         engine = BudgetQueryEngine(df, schema, api_key)
         user_query = st.text_input("💬 Ask a strategic question:")
         if user_query:
-            with st.spinner("Compiling SQL & Processing..."):
-                sql = engine.ask_gemini_sql(user_query)
+            with st.spinner("Compiling SQL via Groq (Llama 3)..."):
+                sql = engine.ask_llm_sql(user_query)
                 st.code(sql, language="sql")
                 res_df, error_msg = engine.execute_sql(sql)
                 if error_msg:
@@ -155,7 +155,7 @@ else:
 
     with t_report:
         if st.button("🚀 Generate Executive Brief"):
-            with st.spinner("Generating..."):
+            with st.spinner("Generating Report via Groq..."):
                 b_str = bottlenecks.head(3)[[entity_col, schema['budget'], 'UNSPENT', 'ABSORPTION_RATE']].to_string()
                 a_str = f"Deficits: {anomalies['ANOMALY_DEFICIT'].sum()}\nSpikes: {anomalies['ANOMALY_SPIKE'].sum()}"
                 advise = BudgetQueryEngine(df, schema, api_key).generate_recommendation_plan(b_str, a_str)

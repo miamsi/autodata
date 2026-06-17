@@ -129,7 +129,7 @@ else:
             fig_f.add_trace(go.Scatter(x=full_track['month'], y=full_track['cumulative'], name='Forecast', line=dict(color='#f59e0b', dash='dash')))
         fig_f.add_trace(go.Scatter(x=f_df['month'], y=[metrics['total_budget']]*12, name='Ceiling', line=dict(color='#ef4444', dash='dot')))
         fig_f.update_layout(height=400, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
-        st.plotly_chart(fig_fig=fig_f, use_container_width=True)
+        st.plotly_chart(fig_f, use_container_width=True)
 
     with t_sim:
         sc_col1, sc_col2 = st.columns([1, 2])

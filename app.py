@@ -39,7 +39,7 @@ with st.sidebar:
     if not api_key:
         st.warning("⚠️ GROQ_API_KEY missing. Running in Offline Math Mode.")
         
-    uploaded_file = st.file_uploader("📥 Upload Official DIPA Ledger (.xlsx)", type=["xlsx", "csv"])
+    uploaded_file = st.file_uploader("📥 Upload Official DIPA Ledger (.xlsx, .csv)", type=["xlsx", "csv"])
     
     if uploaded_file and st.session_state.raw_data is None:
         with st.spinner("Analyzing schema..."):
@@ -151,7 +151,12 @@ else:
         st.dataframe(anomalies[anomalies['IS_ANOMALOUS'] == True].sort_values(by=schema['budget'], ascending=False), use_container_width=True)
 
     with t_bottleneck:
-        st.dataframe(bottlenecks.style.background_gradient(subset=['IMPACT_SCORE'], cmap='Reds'), use_container_width=True)
+        # BULLETPROOF FALLBACK FOR MATPLOTLIB / STYLER
+        try:
+            st.dataframe(bottlenecks.style.background_gradient(subset=['IMPACT_SCORE'], cmap='Reds'), use_container_width=True)
+        except ImportError:
+            st.warning("Matplotlib not fully loaded yet. Rendering standard table fallback:")
+            st.dataframe(bottlenecks, use_container_width=True)
 
     with t_report:
         if st.button("🚀 Generate Executive Brief"):

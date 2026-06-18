@@ -71,6 +71,10 @@ def clean_and_prepare_data(df: pd.DataFrame, schema: Dict[str, Any]) -> pd.DataF
     """
     cleaned_df = df.copy()
     
+    # Enforce standard formatting for KDDEPT to prevent downstream string parsing errors
+    if 'KDDEPT' in cleaned_df.columns:
+        cleaned_df['KDDEPT'] = cleaned_df['KDDEPT'].astype(str).str.replace(r'\.0$', '', regex=True).str.zfill(3)
+    
     def parse_numeric(v: Any) -> float:
         if pd.isna(v):
             return 0.0
@@ -121,3 +125,5 @@ def clean_and_prepare_data(df: pd.DataFrame, schema: Dict[str, Any]) -> pd.DataF
             schema['months'][m] = col_name
 
     return cleaned_df
+
+"""

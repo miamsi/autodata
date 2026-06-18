@@ -200,5 +200,3 @@ Hasilkan Rencana Akselerasi Strategis dalam format Markdown berbahasa Indonesia 
             return response.choices[0].message.content
         except Exception as e:
             return f"**Pembuatan Rekomendasi Gagal.** Kemungkinan limit API tercapai atau format data terlalu besar. Pesan Sistem Groq: `{str(e)}`"
-
-"""

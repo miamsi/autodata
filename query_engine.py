@@ -16,7 +16,7 @@ class BudgetQueryEngine:
         self.conn.register('budget_data', self.df)
         
         self.client = Groq(api_key=api_key) if api_key else None
-        self.model_name = "llama3-70b-8192"
+        self.model_name = "openai/gpt-oss-20b"
 
     def execute_sql(self, sql_query: str) -> Tuple[pd.DataFrame, Optional[str]]:
         try:

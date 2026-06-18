@@ -1,131 +1,123 @@
 """
-Budget Intelligence Agent - Structural Schema Detection & Data Engineering Core
+Budget Intelligence Agent - Schema Detector & Normalization Engine
 """
 
 import pandas as pd
-import numpy as np
+import re
 from typing import Dict, Any
 
-COLUMN_METADATA = {
-    "KDDEPT": ["kode departemen", "kode kementerian", "kode k/l", "ministry code", "agency code", "kddept"],
-    "NMDEPT": ["nama departemen", "nama kementerian", "nama k/l", "kementerian", "lembaga", "ministry name", "nmdept"],
-    "KDUNIT": ["kode unit", "kode eselon 1", "kode ditjen", "echelon 1 code", "kdunit"],
-    "NMUNIT": ["nama unit", "nama eselon 1", "nama ditjen", "direktorat jenderal", "unit kerja eselon i", "nmunit"],
-    "KDKANWIL": ["kode kanwil", "kode kantor wilayah", "regional office code", "kdkanwil"],
-    "NMKANWIL": ["nama kanwil", "kantor wilayah djpb", "kanwil mana", "regional office name", "nmkanwil"],
-    "KDKPPN": ["kode kppn", "kppn code", "treasury office code", "kdkppn"],
-    "NMKPPN": ["nama kppn", "kantor bayar", "kppn mana", "treasury office name", "nmppn", "nmkppn"],
-    "KDSATKER": ["kode satker", "nomor satker", "working unit code", "kdsatker"],
-    "NMSATKER": ["nama satker", "satuan kerja", "satker apa", "working unit name", "nmsatker"],
-    "KDPROGRAM": ["kode program", "kd prog", "program code", "kdprogram"],
-    "NMPROGRAM": ["nama program", "program", "program kerja", "nmprogram"],
-    "KDGIAT": ["kode kegiatan", "kd giat", "activity code", "kdgiat"],
-    "NMGIAT": ["nama kegiatan", "kegiatan", "activity name", "nmgiat"],
-    "KDOUTPUT": ["kode output", "kd output", "output code", "kdoutput"],
-    "NMOUTPUT": ["nama output", "output", "keluaran", "output name", "nmoutput"],
-    "KDAKUN": ["kode akun", "mata anggaran", "mak", "account code", "coa", "kdakun"],
-    "NMAKUN": ["nama akun", "uraian akun", "jenis belanja", "account name", "nmakun"],
-    "KDSDANA": ["kode sumber dana", "kd sdana", "source of funds code", "kdsdana"],
-    "NMSDANA2": ["nama sumber dana", "sumber dana", "jenis dana", "source of funds description", "nmsdana2"],
-    "PAGU_DIPA": ["pagu", "pagu anggaran", "plafon anggaran", "anggaran dipa", "total budget", "allocation", "pagu_dipa"],
-    "BLOKIR": ["blokir", "anggaran diblokir", "pagu blokir", "automatic adjustment", "blocked budget", "blokir"],
-    "JAN": ["januari", "jan", "realisasi januari", "january spending"],
-    "FEB": ["februari", "feb", "realisasi februari", "february spending"],
-    "MAR": ["maret", "mar", "realisasi maret", "march spending"],
-    "APR": ["april", "apr", "realisasi april", "april spending"],
-    "MEI": ["mei", "may", "realisasi mei", "may spending"],
-    "JUN": ["juni", "jun", "realisasi juni", "june spending"],
-    "JUL": ["juli", "jul", "realisasi juli", "july spending"],
-    "AGS": ["agustus", "ags", "agt", "realisasi agustus", "august spending"],
-    "SEP": ["september", "sep", "realisasi september", "september spending"],
-    "OKT": ["oktober", "okt", "realisasi oktober", "october spending"],
-    "NOV": ["november", "nov", "realisasi november", "november spending"],
-    "DES": ["desember", "des", "realisasi desember", "december spending"]
-}
-
 def detect_budget_schema(df: pd.DataFrame) -> Dict[str, Any]:
-    columns = [str(c).strip() for c in df.columns]
-    columns_lower = [c.lower() for c in columns]
+    """
+    Analyzes dataframe columns to identify organizational hierarchies,
+    accounts, budget limits (Pagu), blocks (Blokir), and monthly buckets.
+    """
+    columns = list(df.columns)
+    months_short = ['JAN', 'FEB', 'MAR', 'APR', 'MEI', 'JUN', 'JUL', 'AGS', 'SEP', 'OKT', 'NOV', 'DES']
+    months_long = ['JANUARI', 'FEBRUARI', 'MARET', 'APRIL', 'MEI', 'JUNI', 'JULI', 'AGUSTUS', 'SEPTEMBER', 'OKTOBER', 'NOVEMBER', 'DESEMBER']
     
     schema = {
-        'budget': None, 'blocked': None, 'account_code': None,
-        'kddept': None, 'nmdept': None, 'kdsatker': None, 'nmsatker': None,
-        'org': [], 'account': [], 'months': {}, 'months_short': []
+        'budget': '',
+        'blocked': '',
+        'months': {},
+        'org': [],
+        'account': []
     }
     
-    def find_match(target_key: str) -> str:
-        if target_key not in COLUMN_METADATA: return None
-        syns = COLUMN_METADATA[target_key]
-        for s in syns:
-            if s in columns_lower: return columns[columns_lower.index(s)]
-        for c in columns:
-            if any(s in c.lower() for s in syns if len(s) > 3): return c
-        return None
+    # 1. Detect Financial Limits
+    for col in columns:
+        cl = col.upper()
+        if any(x in cl for x in ['PAGU', 'ALOKASI', 'BUDGET', 'CEILING']):
+            if not any(b in cl for b in ['BLOKIR', 'BLOCKED', 'SISA']):
+                schema['budget'] = col
+        if any(x in cl for x in ['BLOKIR', 'BLOCKED', 'HOLD']):
+            schema['blocked'] = col
 
-    schema['budget'] = find_match('PAGU_DIPA')
-    schema['blocked'] = find_match('BLOKIR')
-    schema['account_code'] = find_match('KDAKUN')
-    schema['kddept'] = find_match('KDDEPT')
-    schema['nmdept'] = find_match('NMDEPT')
-    schema['kdsatker'] = find_match('KDSATKER')
-    schema['nmsatker'] = find_match('NMSATKER')
-    
-    for m in ["JAN", "FEB", "MAR", "APR", "MEI", "JUN", "JUL", "AGS", "SEP", "OKT", "NOV", "DES"]:
-        matched_col = find_match(m)
-        if matched_col:
-            schema['months'][m] = matched_col
-            schema['months_short'].append(m)
+    # Fallbacks
+    if not schema['budget']:
+        for col in columns:
+            if 'PAGU' in col.upper():
+                schema['budget'] = col
+                break
+    if not schema['blocked']:
+        for col in columns:
+            if 'BLOK' in col.upper():
+                schema['blocked'] = col
+                break
 
-    for k in ["NMDEPT", "NMUNIT", "NMKANWIL", "NMKPPN", "NMSATKER", "KDDEPT", "KDUNIT", "KDKANWIL", "KDKPPN", "KDSATKER"]:
-        m = find_match(k)
-        if m and m not in schema['org']: schema['org'].append(m)
+    # 2. Map Time-Series Buckets
+    for i, m_short in enumerate(months_short):
+        m_long = months_long[i]
+        for col in columns:
+            cl = col.upper()
+            if cl == m_short or cl == m_long or cl.startswith(m_short) or cl.startswith(m_long):
+                schema['months'][m_short] = col
+                break
+
+    # 3. Categorize Hierarchies
+    for col in columns:
+        cl = col.upper()
+        if col == schema['budget'] or col == schema['blocked'] or col in schema['months'].values():
+            continue
+        if any(x in cl for x in ['DEPT', 'UNIT', 'KANWIL', 'KPPN', 'SATKER', 'KEMENTERIAN', 'LEMBAGA', 'REGION', 'WILAYAH']):
+            schema['org'].append(col)
+        elif any(x in cl for x in ['AKUN', 'PROGRAM', 'GIAT', 'OUTPUT', 'SUBOUTPUT', 'KOMPONEN', 'MATA_ANGGARAN']):
+            schema['account'].append(col)
             
-    for k in ["NMPROGRAM", "NMGIAT", "NMOUTPUT", "NMAKUN", "NMSDANA2", "KDPROGRAM", "KDGIAT", "KDOUTPUT", "KDAKUN", "KDSDANA"]:
-        m = find_match(k)
-        if m and m not in schema['account']: schema['account'].append(m)
-        
     return schema
 
 def clean_and_prepare_data(df: pd.DataFrame, schema: Dict[str, Any]) -> pd.DataFrame:
-    df_clean = df.copy()
+    """
+    Normalizes dirty currency string inputs into DuckDB-safe floats.
+    """
+    cleaned_df = df.copy()
     
-    if schema['budget']:
-        df_clean[schema['budget']] = pd.to_numeric(df_clean[schema['budget']], errors='coerce').fillna(0.0)
-    else:
-        raise ValueError("FATAL ERROR: Kolom Pagu Anggaran Utama tidak terdeteksi.")
+    def parse_numeric(v: Any) -> float:
+        if pd.isna(v):
+            return 0.0
+        v_str = str(v).strip()
+        if not v_str or v_str.lower() in ['censored', '-', 'null', 'none']:
+            return 0.0
+        v_str = v_str.replace(' ', '')
         
-    if schema['blocked']:
-        df_clean[schema['blocked']] = pd.to_numeric(df_clean[schema['blocked']], errors='coerce').fillna(0.0)
+        # Handle decimal/thousands variations
+        if ',' in v_str and '.' in v_str:
+            if v_str.find(',') > v_str.find('.'):
+                v_str = v_str.replace('.', '').replace(',', '.')
+            else:
+                v_str = v_str.replace(',', '')
+        elif ',' in v_str:
+            if len(v_str.split(',')[-1]) <= 2:
+                v_str = v_str.replace(',', '.')
+            else:
+                v_str = v_str.replace(',', '')
+                
+        try:
+            return float(re.sub(r'[^\d\.\-]', '', v_str))
+        except ValueError:
+            return 0.0
+
+    # Clean primary boundaries
+    if schema['budget'] and schema['budget'] in cleaned_df.columns:
+        cleaned_df[schema['budget']] = cleaned_df[schema['budget']].apply(parse_numeric)
+    else:
+        schema['budget'] = 'TOTAL_PAGU_FALLBACK'
+        cleaned_df['TOTAL_PAGU_FALLBACK'] = 0.0
+        
+    if schema['blocked'] and schema['blocked'] in cleaned_df.columns:
+        cleaned_df[schema['blocked']] = cleaned_df[schema['blocked']].apply(parse_numeric)
     else:
         schema['blocked'] = 'BLOKIR_FALLBACK'
-        df_clean['BLOKIR_FALLBACK'] = 0.0
+        cleaned_df['BLOKIR_FALLBACK'] = 0.0
 
-    for m, col in schema['months'].items():
-        df_clean[col] = pd.to_numeric(df_clean[col], errors='coerce').fillna(0.0)
-        
-    df_clean['PAGU_EFEKTIF'] = df_clean[schema['budget']] - df_clean[schema['blocked']]
-    
-    jenis_belanja_map = {
-        '51': 'Belanja Pegawai', '52': 'Belanja Barang', '53': 'Belanja Modal',
-        '57': 'Belanja Bantuan Sosial', '66': 'Belanja Dana Desa',
-        '63': 'Belanja DAK Fisik', '65': 'Belanja DAK Non Fisik',
-        '61': 'Belanja Dana Bagi Hasil', '62': 'Belanja DAU'
-    }
-    
-    if schema['account_code']:
-        df_clean['JENIS_BELANJA'] = df_clean[schema['account_code']].astype(str).str.strip().str[:2].map(jenis_belanja_map).fillna('Belanja Lainnya')
-    else:
-        df_clean['JENIS_BELANJA'] = 'Belanja Lainnya'
-        
-    if schema['months'].values():
-        df_clean['TOTAL_REALISASI_YTD'] = df_clean[list(schema['months'].values())].sum(axis=1)
-    else:
-        df_clean['TOTAL_REALISASI_YTD'] = 0.0
-        
-    df_clean['PERSEN_REALISASI_EFEKTIF'] = np.where(
-        df_clean['PAGU_EFEKTIF'] > 0, 
-        (df_clean['TOTAL_REALISASI_YTD'] / df_clean['PAGU_EFEKTIF']) * 100, 
-        0.0
-    )
-    
-    return df_clean
+    # Clean calendar buckets
+    months_list = ['JAN', 'FEB', 'MAR', 'APR', 'MEI', 'JUN', 'JUL', 'AGS', 'SEP', 'OKT', 'NOV', 'DES']
+    for m in months_list:
+        if m in schema['months'] and schema['months'][m] in cleaned_df.columns:
+            col_name = schema['months'][m]
+            cleaned_df[col_name] = cleaned_df[col_name].apply(parse_numeric)
+        else:
+            col_name = f'{m}_FALLBACK'
+            cleaned_df[col_name] = 0.0
+            schema['months'][m] = col_name
+
+    return cleaned_df

@@ -7,12 +7,14 @@ from typing import Dict, Any
 from docx import Document
 import io
 
+# FUNGSI INI ADALAH PENYEBAB ERROR TADI. SEKARANG SUDAH KITA EKSPOS.
 def format_rp(value):
     """Mengubah angka menjadi format Rupiah Indonesia."""
     try:
         if pd.isna(value): return "Rp 0"
         is_neg = value < 0
         val = abs(value)
+        # Format ribuan dengan titik
         fmt = f"{val:,.0f}".replace(",", "X").replace(".", ",").replace("X", ".")
         res = f"Rp {fmt}"
         return f"-{res}" if is_neg else res
@@ -20,6 +22,8 @@ def format_rp(value):
         return "Rp 0"
 
 def compile_executive_report(metrics: Dict[str, Any], forecast: Dict[str, Any], bottlenecks_df: pd.DataFrame, anomalies_df: pd.DataFrame, ai_recommendations: str) -> str:
+    
+    # Format the bottleneck dataframe so it looks good in Markdown
     b_display = bottlenecks_df.head(5).copy()
     for col in b_display.columns:
         if b_display[col].dtype in ['float64', 'int64']:

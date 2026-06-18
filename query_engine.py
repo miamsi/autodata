@@ -133,7 +133,8 @@ Rules:
 1. Total Realization for any row is computed as the sum of its monthly columns: ({' + '.join(list(self.schema['months'].values()))}).
 2. Always select readable text columns (like NMDEPT, NMSATKER, NMAKUN).
 3. Use 'ORDER BY ... DESC LIMIT 10' for top/highest requests.
-4. Return ONLY the raw SQL wrapped in a markdown code block.
+4. IMPORTANT: Always use GROUP BY and SUM() when analyzing or ranking categorical entities (like NMDEPT, NMSATKER, or NMAKUN) to prevent duplicate text rows.
+5. Return ONLY the raw SQL wrapped in a markdown code block.
 
 User Question: "{user_question}"
 """
@@ -160,7 +161,7 @@ Pertanyaan User: "{user_question}"
 Hasil Data:
 {result_markdown}
 
-Tuliskan narasi profesional untuk menganalisis data ini dalam Bahasa Indonesia. Jawab pertanyaan secara langsung, soroti tren, dan berikan 2 saran operasional. Dilarang menyebut kata SQL atau nama tabel database dalam jawaban Anda. Format angka dengan mata uang Rupiah jika ada nominal uang.
+Tuliskan HANYA 1 paragraf singkat yang mendeskripsikan data ini secara faktual dalam Bahasa Indonesia. DILARANG menggunakan poin-poin (bullet points), dilarang memberikan saran operasional, dan dilarang menyebut kata SQL. Format angka dengan mata uang Rupiah jika ada nominal uang.
 """
         try:
             response = self.client.chat.completions.create(

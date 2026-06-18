@@ -8,6 +8,83 @@ from groq import Groq
 from typing import Dict, Any, Tuple, Optional
 
 class BudgetQueryEngine:
+    # Embedded DJPb Context Mapping for AI Prompting
+    DJPB_CONTEXT_MAPPING = """
+    # SYSTEM CONTEXT: BUDGET REALIZATION DATA DICTIONARY (DJPb STANDARD)
+    # Use this mapping to translate user queries into data filters.
+    
+    data_source: "DJPb Budget Realization Report"
+    column_mappings:
+      - column: "KDDEPT"
+        synonyms: ["kode departemen", "kode kementerian", "kode k/l", "ministry code"]
+      - column: "NMDEPT"
+        synonyms: ["nama departemen", "nama kementerian", "nama k/l", "kementerian"]
+      - column: "KDUNIT"
+        synonyms: ["kode unit", "kode eselon 1", "kode ditjen"]
+      - column: "NMUNIT"
+        synonyms: ["nama unit", "nama eselon 1", "nama ditjen", "direktorat jenderal"]
+      - column: "KDKANWIL"
+        synonyms: ["kode kanwil", "kode kantor wilayah"]
+      - column: "NMKANWIL"
+        synonyms: ["nama kanwil", "kantor wilayah djpb", "kanwil mana"]
+      - column: "KDKPPN"
+        synonyms: ["kode kppn", "kppn code"]
+      - column: "NMKPPN"
+        synonyms: ["nama kppn", "kantor bayar", "kppn mana"]
+      - column: "KDSATKER"
+        synonyms: ["kode satker", "nomor satker"]
+      - column: "NMSATKER"
+        synonyms: ["nama satker", "satuan kerja", "satker apa"]
+      - column: "KDPROGRAM"
+        synonyms: ["kode program", "kd prog"]
+      - column: "NMPROGRAM"
+        synonyms: ["nama program", "program", "program kerja"]
+      - column: "KDGIAT"
+        synonyms: ["kode kegiatan", "kd giat"]
+      - column: "NMGIAT"
+        synonyms: ["nama kegiatan", "kegiatan"]
+      - column: "KDOUTPUT"
+        synonyms: ["kode output", "kd output"]
+      - column: "NMOUTPUT"
+        synonyms: ["nama output", "output", "keluaran"]
+      - column: "KDAKUN"
+        synonyms: ["kode akun", "mata anggaran", "mak", "coa"]
+      - column: "NMAKUN"
+        synonyms: ["nama akun", "uraian akun", "jenis belanja"]
+      - column: "KDSDANA"
+        synonyms: ["kode sumber dana", "kd sdana"]
+      - column: "NMSDANA2"
+        synonyms: ["nama sumber dana", "sumber dana", "jenis dana"]
+      - column: "PAGU_DIPA"
+        synonyms: ["pagu", "pagu anggaran", "plafon anggaran", "anggaran dipa", "total budget"]
+      - column: "JAN"
+        synonyms: ["januari", "jan", "realisasi januari"]
+      - column: "FEB"
+        synonyms: ["februari", "feb", "realisasi februari"]
+      - column: "MAR"
+        synonyms: ["maret", "mar", "realisasi maret"]
+      - column: "APR"
+        synonyms: ["april", "apr", "realisasi april"]
+      - column: "MEI"
+        synonyms: ["mei", "may", "realisasi mei"]
+      - column: "JUN"
+        synonyms: ["juni", "jun", "realisasi juni"]
+      - column: "JUL"
+        synonyms: ["juli", "jul", "realisasi juli"]
+      - column: "AGS"
+        synonyms: ["agustus", "ags", "agt", "realisasi agustus"]
+      - column: "SEP"
+        synonyms: ["september", "sep", "realisasi september"]
+      - column: "OKT"
+        synonyms: ["oktober", "okt", "realisasi oktober"]
+      - column: "NOV"
+        synonyms: ["november", "nov", "realisasi november"]
+      - column: "DES"
+        synonyms: ["desember", "des", "realisasi desember"]
+      - column: "BLOKIR"
+        synonyms: ["blokir", "anggaran diblokir", "pagu blokir", "automatic adjustment"]
+    """
+
     def __init__(self, df: pd.DataFrame, schema: Dict[str, Any], api_key: str):
         self.conn = duckdb.connect(database=':memory:')
         self.schema = schema
@@ -41,7 +118,7 @@ class BudgetQueryEngine:
         org_str = ", ".join(self.schema['org'])
         acc_str = ", ".join(self.schema['account'])
         
-        system_prompt = "You are an expert DuckDB SQL engineer. You only output raw SQL queries wrapped in ```sql tags. Do not write explanations."
+        system_prompt = f"You are an expert DuckDB SQL engineer. You only output raw SQL queries wrapped in ```sql tags. Do not write explanations.\n\n{self.DJPB_CONTEXT_MAPPING}"
         user_prompt = f"""
 Translate the user's question into a valid DuckDB SQL query.
 Table Name: 'budget_data'
@@ -77,7 +154,7 @@ User Question: "{user_question}"
         # Limit to 20 rows to prevent Token Limit Exceeded on wide tables
         result_markdown = result_df.head(20).to_markdown(index=False)
         
-        system_prompt = "Anda adalah Agen Intelijen Anggaran Eksekutif. Anda wajib menjawab selalu menggunakan Bahasa Indonesia yang profesional dan formal."
+        system_prompt = f"Anda adalah Agen Intelijen Anggaran Eksekutif. Anda wajib menjawab selalu menggunakan Bahasa Indonesia yang profesional dan formal.\n\n{self.DJPB_CONTEXT_MAPPING}"
         user_prompt = f"""
 Pertanyaan User: "{user_question}"
 Hasil Data:
@@ -99,7 +176,7 @@ Tuliskan narasi profesional untuk menganalisis data ini dalam Bahasa Indonesia. 
         if not self.client:
             return "Groq API key missing. Cannot generate AI action plans."
             
-        system_prompt = "Anda adalah Penasihat Strategis Anggaran. Wajib merespons menggunakan Bahasa Indonesia profesional."
+        system_prompt = f"Anda adalah Penasihat Strategis Anggaran. Wajib merespons menggunakan Bahasa Indonesia profesional.\n\n{self.DJPB_CONTEXT_MAPPING}"
         user_prompt = f"""
 Tinjau anomali dan bottleneck anggaran berikut:
 
@@ -123,3 +200,5 @@ Hasilkan Rencana Akselerasi Strategis dalam format Markdown berbahasa Indonesia 
             return response.choices[0].message.content
         except Exception as e:
             return f"**Pembuatan Rekomendasi Gagal.** Kemungkinan limit API tercapai atau format data terlalu besar. Pesan Sistem Groq: `{str(e)}`"
+
+"""

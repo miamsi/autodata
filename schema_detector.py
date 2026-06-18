@@ -125,5 +125,3 @@ def clean_and_prepare_data(df: pd.DataFrame, schema: Dict[str, Any]) -> pd.DataF
             schema['months'][m] = col_name
 
     return cleaned_df
-
-"""

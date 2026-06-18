@@ -23,8 +23,7 @@ def compute_core_metrics(df: pd.DataFrame, schema: Dict[str, Any]) -> Dict[str, 
         col = schema['months'].get(m)
         m_sum = float(df[col].sum()) if col and col in df.columns else 0.0
         monthly_totals[m] = m_sum
-        if m_sum > 0:
-            current_month_idx = i + 1
+        if m_sum > 0: current_month_idx = i + 1
             
     if current_month_idx == 0: current_month_idx = 1
         
@@ -58,29 +57,24 @@ def run_forecasting_engine(metrics: Dict[str, Any]) -> Dict[str, Any]:
     if current_month_idx >= 12:
         forecast_eoy_realization = metrics['total_realization']
     else:
-        remaining_months = 12 - current_month_idx
-        forecast_eoy_realization = total_ytd_realization + (avg_monthly_burn * remaining_months)
+        forecast_eoy_realization = total_ytd_realization + (avg_monthly_burn * (12 - current_month_idx))
         
     forecast_absorption_rate = (forecast_eoy_realization / total_budget * 100) if total_budget > 0 else 0.0
     under_absorption = max(0.0, total_budget - forecast_eoy_realization)
     budget_deficit_risk = max(0.0, forecast_eoy_realization - total_budget)
     
     dec_spending = monthly_totals.get('DES', 0.0)
-    if current_month_idx == 12:
-        dec_concentration_pct = (dec_spending / metrics['total_realization'] * 100) if metrics['total_realization'] > 0 else 0.0
-    else:
-        dec_concentration_pct = (avg_monthly_burn / forecast_eoy_realization * 100) if forecast_eoy_realization > 0 else 0.0
+    dec_concentration_pct = (dec_spending / metrics['total_realization'] * 100) if current_month_idx == 12 and metrics['total_realization'] > 0 else (avg_monthly_burn / forecast_eoy_realization * 100 if forecast_eoy_realization > 0 else 0.0)
 
-    forecast_monthly_trend = []
+    forecast_trend = []
     running_total = 0.0
     for i, m in enumerate(months_short):
-        idx = i + 1
-        if idx <= current_month_idx:
+        if i + 1 <= current_month_idx:
             running_total += monthly_totals[m]
-            forecast_monthly_trend.append({'month': m, 'type': 'Actual', 'value': monthly_totals[m], 'cumulative': running_total})
+            forecast_trend.append({'month': m, 'type': 'Actual', 'value': monthly_totals[m], 'cumulative': running_total})
         else:
             running_total += avg_monthly_burn
-            forecast_monthly_trend.append({'month': m, 'type': 'Forecast', 'value': avg_monthly_burn, 'cumulative': running_total})
+            forecast_trend.append({'month': m, 'type': 'Forecast', 'value': avg_monthly_burn, 'cumulative': running_total})
             
     return {
         'forecast_eoy_realization': forecast_eoy_realization,
@@ -88,8 +82,7 @@ def run_forecasting_engine(metrics: Dict[str, Any]) -> Dict[str, Any]:
         'under_absorption': under_absorption,
         'budget_deficit_risk': budget_deficit_risk,
         'dec_concentration_pct': dec_concentration_pct,
-        'forecast_trend': forecast_monthly_trend,
-        'avg_monthly_burn': avg_monthly_burn
+        'forecast_trend': forecast_trend
     }
 
 def run_simulation_engine(metrics: Dict[str, Any], spending_multiplier: float, target_absorption: float, release_blocked: bool) -> Dict[str, Any]:
@@ -116,20 +109,16 @@ def run_reverse_math_engine(metrics: Dict[str, Any], target_absorption_pct: floa
     current_month_idx = metrics['current_month_idx']
     
     target_realization = (target_absorption_pct / 100.0) * total_budget
-    remaining_to_spend = target_realization - total_ytd_realization
+    remaining_to_spend = max(0.0, target_realization - total_ytd_realization)
+    remaining_months = max(1, 12 - current_month_idx)
     
-    remaining_months = 12 - current_month_idx
-    required_monthly_spending = (remaining_to_spend / remaining_months) if remaining_months > 0 else 0.0
-    if required_monthly_spending < 0: required_monthly_spending = 0.0
-        
-    required_monthly_rate_pct = (required_monthly_spending / total_budget * 100) if total_budget > 0 else 0.0
+    required_monthly_spending = remaining_to_spend / remaining_months
     
     return {
         'target_realization': target_realization,
         'remaining_to_spend': remaining_to_spend,
         'remaining_months': remaining_months,
         'required_monthly_spending': required_monthly_spending,
-        'required_monthly_rate_pct': required_monthly_rate_pct,
         'target_achieved': total_ytd_realization >= target_realization
     }
 
@@ -139,32 +128,29 @@ def run_anomaly_detection(df: pd.DataFrame, schema: Dict[str, Any], metrics: Dic
     month_cols = list(schema['months'].values())
     current_month_idx = metrics['current_month_idx']
     
-    anomalies_df = df.copy()
-    anomalies_df['ROW_REALIZATION'] = anomalies_df[month_cols].sum(axis=1)
-    anomalies_df['ROW_ABSORPTION_RATE'] = np.where(anomalies_df[budget_col] > 0, (anomalies_df['ROW_REALIZATION'] / anomalies_df[budget_col] * 100), 0.0)
-    anomalies_df['ROW_BLOKIR_RATE'] = np.where(anomalies_df[budget_col] > 0, (anomalies_df[blocked_col] / anomalies_df[budget_col] * 100), 0.0)
+    anom_df = df.copy()
+    anom_df['ROW_REALIZATION'] = anom_df[month_cols].sum(axis=1)
+    anom_df['ROW_ABSORPTION_RATE'] = np.where(anom_df[budget_col] > 0, (anom_df['ROW_REALIZATION'] / anom_df[budget_col] * 100), 0.0)
+    anom_df['ROW_BLOKIR_RATE'] = np.where(anom_df[budget_col] > 0, (anom_df[blocked_col] / anom_df[budget_col] * 100), 0.0)
     
-    anomalies_df['ANOMALY_DEFICIT'] = anomalies_df['ROW_REALIZATION'] > anomalies_df[budget_col]
+    anom_df['ANOMALY_DEFICIT'] = anom_df['ROW_REALIZATION'] > anom_df[budget_col]
+    anom_df['ANOMALY_LOW_ABSORPTION'] = (anom_df[budget_col] >= anom_df[budget_col].quantile(0.75)) & (anom_df['ROW_ABSORPTION_RATE'] < (current_month_idx * 5.0)) & (anom_df[budget_col] > 0)
     
-    proportional_target = current_month_idx * 5.0
-    budget_threshold = anomalies_df[budget_col].quantile(0.75)
-    anomalies_df['ANOMALY_LOW_ABSORPTION'] = (anomalies_df[budget_col] >= budget_threshold) & (anomalies_df['ROW_ABSORPTION_RATE'] < proportional_target) & (anomalies_df[budget_col] > 0)
-    
-    row_month_max = anomalies_df[month_cols].max(axis=1)
-    row_month_sum = anomalies_df[month_cols].sum(axis=1)
+    row_month_max = anom_df[month_cols].max(axis=1)
+    row_month_sum = anom_df[month_cols].sum(axis=1)
     row_month_avg_others = (row_month_sum - row_month_max) / 11.0
-    anomalies_df['ANOMALY_SPIKE'] = (row_month_max > (3.0 * row_month_avg_others)) & (row_month_max > 0)
-    anomalies_df['ANOMALY_HIGH_BLOKIR'] = anomalies_df['ROW_BLOKIR_RATE'] > 20.0
+    anom_df['ANOMALY_SPIKE'] = (row_month_max > (3.0 * row_month_avg_others)) & (row_month_max > 0)
+    anom_df['ANOMALY_HIGH_BLOKIR'] = anom_df['ROW_BLOKIR_RATE'] > 20.0
     
-    anomalies_df['IS_ANOMALOUS'] = anomalies_df['ANOMALY_DEFICIT'] | anomalies_df['ANOMALY_LOW_ABSORPTION'] | anomalies_df['ANOMALY_SPIKE'] | anomalies_df['ANOMALY_HIGH_BLOKIR']
-    return anomalies_df
+    anom_df['IS_ANOMALOUS'] = anom_df['ANOMALY_DEFICIT'] | anom_df['ANOMALY_LOW_ABSORPTION'] | anom_df['ANOMALY_SPIKE'] | anom_df['ANOMALY_HIGH_BLOKIR']
+    return anom_df
 
 def run_debottlenecking_engine(df: pd.DataFrame, schema: Dict[str, Any], metrics: Dict[str, Any]) -> pd.DataFrame:
     budget_col = schema['budget']
     blocked_col = schema['blocked']
     month_cols = list(schema['months'].values())
     
-    entity_col = schema['org'][1] if len(schema['org']) > 1 else (schema['org'][0] if schema['org'] else 'ENTITY')
+    entity_col = schema['kdsatker'] if schema['kdsatker'] else (schema['org'][0] if schema['org'] else 'ENTITY')
     if entity_col not in df.columns:
         df['ENTITY_GROUP'] = 'All Operations'
         entity_col = 'ENTITY_GROUP'
